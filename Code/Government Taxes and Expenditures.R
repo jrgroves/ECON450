@@ -78,7 +78,6 @@ emp.plot1<-ggplot(emp1) +
 emp2<-emp %>%
   filter(Sector != "Private" & Sector != "Total")
 
-
 ggplot(emp2) +
   geom_line(aes(Year, Employment/1000, color=Sector), size=1)+
   scale_x_continuous(breaks = seq(1930,2000,10))+
@@ -93,18 +92,18 @@ rm(temp1, temp2, temp3, temp4, temp)
 
 #GDP Values####
 
-lines<-c(1, 22)
+lines<-c(1)
 
 userSpecList <- list('UserID' = beaKey , 
                      'Method' = 'GetData',
                      'datasetname' = 'NIPA',
                      'Frequency' = 'A',
-                     'TableName' = 'T10106',
+                     'TableName' = 'T10105',
                      'Year' = "ALL")
 
 temp <- beaGet(userSpecList, asWide = FALSE)
 
-data<-temp %>%
+GDP<-temp %>%
   filter(LineNumber %in% lines) %>%
   select(LineDescription, DataValue, TimePeriod) %>%
   rename(Desc = LineDescription,
@@ -113,61 +112,191 @@ data<-temp %>%
   group_by(Year, Desc) %>%
   distinct(Year, Desc, Value) %>%
   pivot_wider(names_from = Desc, values_from = Value) %>%
-  rename(GDP = 'Gross domestic product',
-         Government = 'Government consumption expenditures and gross investment')%>%
+  rename(GDP = 'Gross domestic product') %>%
   mutate(Year = as.numeric(Year))%>%
-  pivot_longer(!Year, names_to = "Measures", values_to = "Dollars") %>%
-  mutate(Dollars = Dollars / 1000000)
-
-
-ggplot(data) +
-  geom_line(aes(Year,Dollars, color=Measures), size=1)+
-  ylab("Trillions of Chained Dollars (2012)")+
-  scale_x_discrete(breaks = seq(1930,2000,10))+
-  labs(title="GDP and Government Spending",
-       caption = "Source: BEA NIPA Table 6.4")+
-  theme_bw()
-
+  pivot_longer(!Year, names_to = "Measures", values_to = "GDP") %>%
+  mutate(Year = as.numeric(Year)) %>%
+  select(!Measures)
   
-
-#Government Employment####
-
-lines<-c(7,11,12,13,35,38,43,52,57,62,65,73,74,79,69,70,87,92)
-
-l2 <- c(3, 87, 92)
-
-userSpecList <- list('UserID' = beaKey , 
-                     'Method' = 'GetData',
-                     'datasetname' = 'NIPA',
-                     'Frequency' = 'A',
-                     'TableName' = 'T60400D',
-                     'Year' = 2020)
-
-emp<-beaGet(userSpecList, asWide = FALSE)
-
-
-data<-emp %>%
-  filter(LineNumber %in% l2) %>%
-  select(LineDescription, DataValue) %>%
-  rename(Desc = LineDescription,
-         Value = DataValue)
-
-# Compute the position of labels
-data <- data %>% 
-  arrange(Desc) %>%
-  mutate(prop = Value / sum(data$Value) *100) %>%
-  mutate(ypos = cumsum(prop)- 0.5*prop )
-
-# Basic pie chart
-ggplot(data, aes(x="", y=prop, fill=Desc)) +
-  geom_bar(stat="identity", width=1, color="white") +
-  coord_polar("y", start=0) +
-  theme_void() + 
-  theme(legend.position="bottom")+
-  scale_fill_brewer(palette="Set1")
+  #Obtain Price Indicies to turn current to Real
+  userSpecList <- list('UserID' = beaKey ,
+                       'Method' = 'GetData',
+                       'datasetname' = 'NIPA',
+                       'Frequency' = 'A',
+                       'TableName' = 'T10104',
+                       'Year' = 'ALL') 
+  
+  temp<-beaGet(userSpecList, asWide = FALSE)
+  
+  Index <- temp %>%
+    filter(LineNumber == 1) %>%
+    select(DataValue, TimePeriod) %>%
+    rename(Index = DataValue,
+           Year = TimePeriod) %>%
+    mutate(Index = Index / 100,
+           Year = as.numeric(Year))
+  
+  #Federal Data
+  
+  lines<-c(34,37,38,39,40,41,42)
+  
+  userSpecList <- list('UserID' = beaKey ,
+                       'Method' = 'GetData',
+                       'datasetname' = 'NIPA',
+                       'Frequency' = 'A',
+                       'TableName' = 'T30100',
+                       'Year' = 'ALL') 
+  
+  temp<-beaGet(userSpecList, asWide = FALSE)
+  
+  data<-temp %>%
+    filter(LineNumber %in% lines) %>%
+    select(DataValue, LineDescription, TimePeriod) %>%
+    rename(Dollars = DataValue,
+           Source = LineDescription,
+           Year = TimePeriod) %>%
+    pivot_wider(names_from = Source, values_from = Dollars) %>%
+    rename(Capital = 'Less: Consumption of fixed capital',
+           Receipts = 'Total receipts') %>%
+    mutate(Capital = Capital * (-1),
+           Expenditure = rowSums(across('Current expenditures':Capital), na.rm = TRUE),
+           Year = as.numeric(Year)) %>%
+    select(Year, Receipts, Expenditure) %>%
+    pivot_longer(!Year, names_to = "Source", values_to = "Dollars")  %>%
+    full_join(Index, by="Year") %>%
+    mutate(Total_Dollars_Real = Dollars / Index) %>%
+    select(!Index)
+    
+  core<-data %>%
+    full_join(GDP, by = "Year")
+  
+  #Federal Data
+  lines<-c(40, 43, 44, 45, 46, 47, 48)
+  
+  userSpecList <- list('UserID' = beaKey ,
+                       'Method' = 'GetData',
+                       'datasetname' = 'NIPA',
+                       'Frequency' = 'A',
+                       'TableName' = 'T30200',
+                       'Year' = 'ALL') 
+  
+  temp<-beaGet(userSpecList, asWide = FALSE)
+  
+  data<-temp %>%
+    filter(LineNumber %in% lines) %>%
+    select(DataValue, LineDescription, TimePeriod) %>%
+    rename(Dollars = DataValue,
+           Source = LineDescription,
+           Year = TimePeriod) %>%
+    pivot_wider(names_from = Source, values_from = Dollars) %>%
+    rename(Capital = 'Less: Consumption of fixed capital',
+           Receipts = 'Total receipts') %>%
+    mutate(Capital = Capital * (-1),
+           Expenditure = rowSums(across('Current expenditures':Capital), na.rm = TRUE),
+           Year = as.numeric(Year)) %>%
+    select(Year, Receipts, Expenditure) %>%
+    pivot_longer(!Year, names_to = "Source", values_to = "Dollars.Fed")  %>%
+    full_join(Index, by="Year") %>%
+    mutate(Total_Dollars.Fed_Real = Dollars.Fed / Index) %>%
+    select(!Index)
+  
+  core<-core %>%
+    full_join(data, by = c("Year", "Source"))
+              
+  #State and Local Data
+  lines<-c(35, 39, 40, 41, 42, 43)
+  
+  userSpecList <- list('UserID' = beaKey ,
+                       'Method' = 'GetData',
+                       'datasetname' = 'NIPA',
+                       'Frequency' = 'A',
+                       'TableName' = 'T30300',
+                       'Year' = 'ALL') 
+  
+  temp<-beaGet(userSpecList, asWide = FALSE)
+  
+  data<-temp %>%
+    filter(LineNumber %in% lines) %>%
+    select(DataValue, LineDescription, TimePeriod) %>%
+    rename(Dollars = DataValue,
+           Source = LineDescription,
+           Year = TimePeriod) %>%
+    pivot_wider(names_from = Source, values_from = Dollars) %>%
+    rename(Capital = 'Less: Consumption of fixed capital',
+           Receipts = 'Total receipts') %>%
+    mutate(Capital = Capital * (-1),
+           Expenditure = rowSums(across('Current expenditures':Capital), na.rm = TRUE),
+           Year = as.numeric(Year)) %>%
+    select(Year, Receipts, Expenditure) %>%
+    pivot_longer(!Year, names_to = "Source", values_to = "Dollars.SaL")  %>%
+    full_join(Index, by="Year") %>%
+    mutate(Total_Dollars.SaL_Real = Dollars.SaL / Index) %>%
+    select(!Index)
+  
+  core<-core %>%
+    full_join(data, by = c("Year", "Source"))
+  
+  #Graphs
+  
+  ggplot(core) +
+    geom_line(aes(x = Year, y = GDP/1000000, color = "GDP"), size = 1) +
+    geom_line(aes(x = Year, y=Total_Dollars_Real/1000000, color = Source), size = 1)+
+    labs(title = "Real GDP and Governmnet Spending and Receipts",
+         caption = "Sourc: BEA NIPA",
+         color = "")+
+    theme_bw() +
+    ylab("Dollars (in Trillions)")
+  
+  
+  ggplot(subset(core, Source=="Receipts")) +
+    geom_line(aes(x = Year, y = Total_Dollars_Real/1000000, color = "All Government"), size = 1) +
+    geom_line(aes(x = Year, y = Total_Dollars.Fed_Real/1000000, color = "Federal"), size = 1) +
+    geom_line(aes(x = Year, y = Total_Dollars.SaL_Real/1000000, color = "State and Local"), size = 1)  +
+    labs(title = "Government Real Receipts by Level",
+         caption = "Sourc: BEA NIPA",
+         color = "")+
+    theme_bw() +
+    ylab("Dollars (in Trillions)")
+              
+  ggplot(subset(core, Source=="Expenditure")) +
+    geom_line(aes(x = Year, y = Total_Dollars_Real/1000000, color = "All Government"), size = 1) +
+    geom_line(aes(x = Year, y = Total_Dollars.Fed_Real/1000000, color = "Federal"), size = 1) +
+    geom_line(aes(x = Year, y = Total_Dollars.SaL_Real/1000000, color = "State and Local"), size = 1)  +
+    labs(title = "Government Real Expenditures by Level",
+         caption = "Sourc: BEA NIPA",
+         color = "")+
+    theme_bw() +
+    ylab("Dollars (in Trillions)")              
+  
+  core<-core %>%
+    mutate(Tot.GDP = Total_Dollars_Real / GDP,
+           Fed.GDP = Total_Dollars.Fed_Real / GDP,
+           SaL.GDP = Total_Dollars.SaL_Real / GDP)
+  
+  
+  ggplot(subset(core, Source=="Receipts")) +
+    geom_line(aes(x = Year, y = Tot.GDP, color = "Total"), size = 1) +
+    geom_line(aes(x = Year, y = Fed.GDP, color = "Federal"), size = 1) +
+    geom_line(aes(x = Year, y = SaL.GDP, color = "State and Local"), size = 1) +
+    labs(title = "Government Receipts as Share of Real GDP",
+         caption = "Sourc: BEA NIPA",
+         color = "")+
+    theme_bw() +
+    ylab("Share of Real GDP")     
+  
+  
+  
+  ggplot(subset(core, Source=="Expenditure")) +
+    geom_line(aes(x = Year, y = Tot.GDP, color = "Total"), size = 1) +
+    geom_line(aes(x = Year, y = Fed.GDP, color = "Federal"), size = 1) +
+    geom_line(aes(x = Year, y = SaL.GDP, color = "State and Local"), size = 1) +
+    labs(title = "Government Expenditures as Share of Real GDP",
+         caption = "Sourc: BEA NIPA",
+         color = "")+
+    theme_bw() +
+    ylab("Share of Real GDP")    
 
 #Government Expenditures by Function####
-
 
 l.tot<-c(1,7,8,13,27,28,29,30,36)
 l.fed <- c(43,48,49,54,67,68,69,70,74)
@@ -181,7 +310,6 @@ userSpecList <- list('UserID' = beaKey ,
                      'Year' = 2020)
 
 exp.fun<-beaGet(userSpecList, asWide = FALSE)
-
 
 data<-exp.fun %>%
   filter(LineNumber %in% l.tot) %>%
@@ -254,7 +382,8 @@ data<-rec %>%
   select(LineDescription, DataValue) %>%
   rename(Source = LineDescription,
          Value = DataValue) %>%
-  mutate(prop = (Value / sum(data$Value)) *100)%>%
+  mutate(Total = sum(data$Value),
+         prop = (Value / Total)*100 ) %>%
   arrange(Source)
 
 
@@ -263,7 +392,7 @@ tot.tax.fun1<-ggplot(data, aes(x="", y=prop, fill=paste0(Source," ",round(prop, 
   coord_polar("y", start=0)+
   theme_void() + 
   theme(legend.position="right")+
-  ggtitle("Government Expenditure by Source: Total")+
+  ggtitle("Government Receipts by Source: Total")+
   labs(caption = "Source: BEA NIPA Table 3.1")+
   scale_fill_brewer(palette="Set1", name = "Source")
 
@@ -281,7 +410,8 @@ data<-rec %>%
   select(LineDescription, DataValue) %>%
   rename(Source = LineDescription,
          Value = DataValue) %>%
-  mutate(prop = (Value / sum(data$Value)) *100)%>%
+  mutate(Total = sum(data$Value),
+         prop = (Value / Total)*100 ) %>%
   arrange(Source)
 
 
@@ -290,7 +420,7 @@ tot.tax.fun2<-ggplot(data, aes(x="", y=prop, fill=paste0(Source," ",round(prop, 
   coord_polar("y", start=0)+
   theme_void() + 
   theme(legend.position="right")+
-  ggtitle("Government Expenditure by Source: Federal")+
+  ggtitle("Government Receipts by Source: Federal")+
   labs(caption = "Source: BEA NIPA Table 3.2")+
   scale_fill_brewer(palette="Set1", name = "Source")
 
@@ -309,7 +439,8 @@ data<-rec %>%
   rename(Source = LineDescription,
          Value = DataValue) %>%
   add_row(Source = 'Taxes from the rest of the world',  Value = 0) %>%
-  mutate(prop = (Value / sum(data$Value)) *100) %>%
+  mutate(Total = sum(data$Value),
+         prop = (Value / Total)*100 ) %>%
   arrange(Source)
 
 tot.tax.fun3<-ggplot(data, aes(x="", y=prop, fill=paste0(Source," ",round(prop, 1),"%"))) +
@@ -317,8 +448,8 @@ tot.tax.fun3<-ggplot(data, aes(x="", y=prop, fill=paste0(Source," ",round(prop, 
   coord_polar("y", start=0)+
   theme_void() + 
   theme(legend.position="right")+
-  ggtitle("Government Expenditure by Source: State and Local")+
+  ggtitle("Government Recepts by Source: State and Local")+
   labs(caption = "Source: BEA NIPA Table 3.3")+
   scale_fill_brewer(palette="Set1", name = "Source")
 
-#Source of Personal Taxes####
+
