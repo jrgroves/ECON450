@@ -33,7 +33,8 @@ globe<-ggplot(core2)+
                              option = "inferno",
                              trans = "sqrt")+
         theme_bw()+
-        theme(  axis.text.x = element_blank(),
-                   axis.text.y = element_blank(),
-                   axis.ticks = element_blank())
+        theme(axis.text.x = element_blank(),
+              axis.text.y = element_blank(),
+              axis.ticks = element_blank())+
+        labs(title="Share of Total Global Income")
 
