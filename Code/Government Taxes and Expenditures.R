@@ -118,7 +118,7 @@ GDP<-temp %>%
   mutate(Year = as.numeric(Year)) %>%
   select(!Measures)
   
-  #Obtain Price Indicies to turn current to Real
+  #Obtain Price Indices to turn current to Real
   userSpecList <- list('UserID' = beaKey ,
                        'Method' = 'GetData',
                        'datasetname' = 'NIPA',
@@ -230,8 +230,7 @@ GDP<-temp %>%
     select(Year, Receipts, Expenditure) %>%
     pivot_longer(!Year, names_to = "Source", values_to = "Dollars.SaL")  %>%
     full_join(Index, by="Year") %>%
-    mutate(Total_Dollars.SaL_Real = Dollars.SaL / Index) %>%
-    select(!Index)
+    mutate(Total_Dollars.SaL_Real = Dollars.SaL / Index) 
   
   core<-core %>%
     full_join(data, by = c("Year", "Source"))
@@ -271,7 +270,8 @@ GDP<-temp %>%
   core<-core %>%
     mutate(Tot.GDP = Total_Dollars_Real / GDP,
            Fed.GDP = Total_Dollars.Fed_Real / GDP,
-           SaL.GDP = Total_Dollars.SaL_Real / GDP)
+           SaL.GDP = Total_Dollars.SaL_Real / GDP,
+           across(Tot.GDP:SaL.GDP, ~.x/10))
   
   
   ggplot(subset(core, Source=="Receipts")) +
@@ -295,10 +295,21 @@ GDP<-temp %>%
          color = "")+
     theme_bw() +
     ylab("Share of Real GDP")    
+  
+  ggplot(subset(core, Source=="Expenditure")) +
+    geom_line(aes(x = Year, y = Tot.GDP, color = "Total Rec."), size = 1) +
+    geom_line(aes(x = Year, y = Fed.GDP, color = "Federal Rec."), size = 1) +
+    geom_line(aes(x = Year, y = SaL.GDP, color = "State and Local Rec"), size = 1) +
+    labs(title = "Government Expenditures as Share of Real GDP",
+         caption = "Sourc: BEA NIPA",
+         color = "")+
+    theme_bw() +
+    ylab("Share of Real GDP")   
+  
 
 #Government Expenditures by Function####
 
-l.tot<-c(1,7,8,13,27,28,29,30,36)
+l.tot<-c(2,7,8,13,27,28,29,30,36)
 l.fed <- c(43,48,49,54,67,68,69,70,74)
 l.stl <- c(81,86,91,101,102,105,106,112)
 
@@ -316,34 +327,36 @@ data<-exp.fun %>%
   select(LineDescription, DataValue) %>%
   rename(Function = LineDescription,
          Value = DataValue) %>%
-  mutate(prop = Value / sum(data$Value) *100)%>%
+  mutate(prop = Value / sum(Value))%>%
   arrange(Function)
 
 
-tot.exp.fun<-ggplot(data, aes(x="", y=prop, fill=Function)) +
+tot.exp.fun<-ggplot(data, aes(x="", y=prop, fill=paste0(Function," ",round(prop*100, 1),"%"))) +
                     geom_bar(stat="identity", width=1, color="white") +
                     coord_polar("y", start=0) +
                     theme_void() + 
                     theme(legend.position="right")+
-                    ggtitle("Total Government Expenditure by Function")+
-  scale_fill_brewer(palette="Set1")
+                    labs(title = "Total Government Expenditure by Function",
+                         caption = "Source: BEA NIPA")+
+                    scale_fill_brewer(palette="Set1", name = "Function")
 
 data<-exp.fun %>%
   filter(LineNumber %in% l.fed) %>%
   select(LineDescription, DataValue) %>%
   rename(Function = LineDescription,
          Value = DataValue) %>%
-  mutate(prop = Value / sum(data$Value) *100)%>%
+  mutate(prop = Value / sum(Value))%>%
   arrange(Function)
 
 
-tot.exp.fun2<-ggplot(data, aes(x="", y=prop, fill=Function)) +
+tot.exp.fun2<-ggplot(data, aes(x="", y=prop, fill=paste0(Function," ",round(prop*100, 1),"%"))) +
   geom_bar(stat="identity", width=1, color="white") +
   coord_polar("y", start=0) +
   theme_void() + 
   theme(legend.position="right")+
-  ggtitle("Government Expenditure by Function: Federal")+
-  scale_fill_brewer(palette="Set1")
+  labs(title = "Government Expenditure by Function: Federal",
+       caption = "Source: BEA NIPA")+
+  scale_fill_brewer(palette="Set1", name = "FUnction")
 
 data<-exp.fun %>%
   filter(LineNumber %in% l.stl) %>%
@@ -351,16 +364,16 @@ data<-exp.fun %>%
   rename(Function = LineDescription,
          Value = DataValue) %>%
   add_row(Function = 'National Defense',  Value = 0) %>%
-  mutate(prop = Value / sum(data$Value) *100) %>%
+  mutate(prop = Value / sum(Value)) %>%
   arrange(Function)
 
-tot.exp.fun3<-ggplot(data, aes(x="", y=prop, fill=Function)) +
+tot.exp.fun3<-ggplot(data, aes(x="", y=prop, fill=paste0(Function," ",round(prop*100, 1),"%"))) +
   geom_bar(stat="identity", width=1, color="white") +
   coord_polar("y", start=0) +
   theme_void() + 
   theme(legend.position="right")+
-  ggtitle("Government Expenditure by Function: Federal")+
-  scale_fill_brewer(palette="Set1")
+  ggtitle("Government Expenditure by Function: State and Local")+
+  scale_fill_brewer(palette="Set1", name = "Function")
 
 #Government Receipts by Source####
 
@@ -383,18 +396,18 @@ data<-rec %>%
   rename(Source = LineDescription,
          Value = DataValue) %>%
   mutate(Total = sum(data$Value),
-         prop = (Value / Total)*100 ) %>%
+         prop = (Value / Total)) %>%
   arrange(Source)
 
 
-tot.tax.fun1<-ggplot(data, aes(x="", y=prop, fill=paste0(Source," ",round(prop, 1),"%"))) +
+tot.tax.fun1<-ggplot(data, aes(x="", y=prop, fill=paste0(Source," ",round(prop*100, 1),"%"))) +
   geom_bar(stat="identity", width=1, color="white") +
   coord_polar("y", start=0)+
   theme_void() + 
   theme(legend.position="right")+
   ggtitle("Government Receipts by Source: Total")+
   labs(caption = "Source: BEA NIPA Table 3.1")+
-  scale_fill_brewer(palette="Set1", name = "Source")
+  scale_fill_brewer(palette="Set1", name = "Source") 
 
 userSpecList <- list('UserID' = beaKey , 
                      'Method' = 'GetData',
@@ -411,11 +424,11 @@ data<-rec %>%
   rename(Source = LineDescription,
          Value = DataValue) %>%
   mutate(Total = sum(data$Value),
-         prop = (Value / Total)*100 ) %>%
+         prop = (Value / Total)) %>%
   arrange(Source)
 
 
-tot.tax.fun2<-ggplot(data, aes(x="", y=prop, fill=paste0(Source," ",round(prop, 1),"%"))) +
+tot.tax.fun2<-ggplot(data, aes(x="", y=prop, fill=paste0(Source," ",round(prop*100, 1),"%"))) +
   geom_bar(stat="identity", width=1, color="white") +
   coord_polar("y", start=0)+
   theme_void() + 
